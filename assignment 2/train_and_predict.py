@@ -1,18 +1,4 @@
-"""
-Kaggle Multiclass Classification — Irrigation Need Prediction
-=============================================================
-Models trained:
-  - Decision Tree        (submitted)
-  - Naive Bayes
-  - Logistic Regression
-  - K-Nearest Neighbours
-  - K-Means (as classifier)
-  - Random Forest        (best CV score)
 
-Cross-validation:
-  - 5-Fold Stratified K-Fold on Random Forest
-  - LOOCV discussed but impractical at 630k rows
-"""
 
 import pandas as pd
 import numpy as np
@@ -29,7 +15,6 @@ from sklearn.ensemble import RandomForestClassifier
 import warnings
 warnings.filterwarnings('ignore')
 
-# ─── CONFIG ──────────────────────────────────────────────────────────────────
 TRAIN_PATH = 'train__1_.csv'
 TEST_PATH  = 'test.csv'
 SUB_PATH   = 'sample_submission.csv'
@@ -47,7 +32,6 @@ NUM_COLS = [
 ]
 FEATURES = CAT_COLS + NUM_COLS
 
-# ─── LOAD ─────────────────────────────────────────────────────────────────────
 print("Loading data...")
 train = pd.read_csv(TRAIN_PATH)
 test  = pd.read_csv(TEST_PATH)
@@ -56,7 +40,6 @@ print(f"  Train: {train.shape}  |  Test: {test.shape}")
 print(f"  Missing values: {train.isnull().sum().sum()}")
 print(f"  Class distribution:\n{train[TARGET].value_counts()}\n")
 
-# ─── ENCODE ──────────────────────────────────────────────────────────────────
 print("Encoding features...")
 for col in CAT_COLS:
     le = LabelEncoder()
@@ -69,12 +52,10 @@ train[TARGET] = le_y.fit_transform(train[TARGET])
 CLASSES = le_y.classes_
 print(f"  Classes: {CLASSES}\n")
 
-# ─── SPLIT ───────────────────────────────────────────────────────────────────
 X = train[FEATURES].values
 y = train[TARGET].values
 X_test_full = test[FEATURES].values
 
-# 60k stratified sample for evaluation (full data used for submission)
 X_samp, _, y_samp, _ = train_test_split(
     X, y, train_size=60_000, stratify=y, random_state=42
 )
@@ -82,7 +63,6 @@ X_tr, X_val, y_tr, y_val = train_test_split(
     X_samp, y_samp, test_size=0.2, stratify=y_samp, random_state=42
 )
 
-# Scale for distance/linear models
 sc = StandardScaler()
 X_tr_s  = sc.fit_transform(X_tr)
 X_val_s = sc.transform(X_val)
@@ -90,7 +70,6 @@ X_val_s = sc.transform(X_val)
 print(f"Train sample: {X_tr.shape}  |  Val: {X_val.shape}\n")
 print("=" * 65)
 
-# ─── HELPERS ─────────────────────────────────────────────────────────────────
 results = {}
 
 def evaluate(name, model, X_train, X_valid, y_train, y_valid):
@@ -107,42 +86,36 @@ def evaluate(name, model, X_train, X_valid, y_train, y_valid):
     print(f"  Classification report:\n{classification_report(y_valid, preds, target_names=CLASSES)}")
     return model
 
-# ─── 1. DECISION TREE ────────────────────────────────────────────────────────
 evaluate(
     'Decision Tree',
     DecisionTreeClassifier(max_depth=15, random_state=42),
     X_tr, X_val, y_tr, y_val
 )
 
-# ─── 2. NAIVE BAYES ──────────────────────────────────────────────────────────
 evaluate(
     'Naive Bayes',
     GaussianNB(),
     X_tr_s, X_val_s, y_tr, y_val
 )
 
-# ─── 3. LOGISTIC REGRESSION ──────────────────────────────────────────────────
 evaluate(
     'Logistic Regression',
     LogisticRegression(max_iter=300, C=1.0, random_state=42),
     X_tr_s, X_val_s, y_tr, y_val
 )
 
-# ─── 4. K-NEAREST NEIGHBOURS ─────────────────────────────────────────────────
 evaluate(
     'KNN (k=11)',
     KNeighborsClassifier(n_neighbors=11, n_jobs=-1),
     X_tr_s, X_val_s, y_tr, y_val
 )
 
-# ─── 5. K-MEANS AS CLASSIFIER ────────────────────────────────────────────────
 print("[K-Means Classifier]")
 km = KMeans(n_clusters=3, random_state=42, n_init=10)
 km.fit(X_tr_s)
 cluster_tr  = km.predict(X_tr_s)
 cluster_val = km.predict(X_val_s)
 
-# Map each cluster to its majority class
 cluster_map = {}
 for c in range(3):
     mask = cluster_tr == c
@@ -156,14 +129,12 @@ print(f"  Accuracy : {acc_km:.4f}")
 print(f"  Confusion matrix:\n{cm_km}")
 print(f"  Note: K-Means clusters ≠ class boundaries — unsupervised mismatch.\n")
 
-# ─── 6. RANDOM FOREST ────────────────────────────────────────────────────────
 evaluate(
     'Random Forest',
     RandomForestClassifier(n_estimators=50, max_depth=15, n_jobs=-1, random_state=42),
     X_tr, X_val, y_tr, y_val
 )
 
-# ─── SUMMARY TABLE ───────────────────────────────────────────────────────────
 print("=" * 65)
 print("MODEL SUMMARY (sorted by accuracy)")
 print("=" * 65)
@@ -173,7 +144,6 @@ for name, m in sorted(results.items(), key=lambda x: x[1]['acc'], reverse=True):
     else:
         print(f"  {name:<25}  Acc={m['acc']:.4f}")
 
-# ─── 5-FOLD CV ON RANDOM FOREST ──────────────────────────────────────────────
 print("\n" + "=" * 65)
 print("5-FOLD STRATIFIED K-FOLD CV — Random Forest (60k sample)")
 print("=" * 65)
@@ -188,8 +158,6 @@ for fold, (tr_idx, val_idx) in enumerate(skf.split(X_samp, y_samp)):
     print(f"  Fold {fold+1}: {fa:.4f}")
 print(f"  CV Mean = {np.mean(fold_accs):.4f}  |  Std = {np.std(fold_accs):.4f}")
 
-# ─── GENERATE SUBMISSION ─────────────────────────────────────────────────────
-# Best submission model: Decision Tree trained on FULL 630k data
 print("\nGenerating submission with Decision Tree (full training data)...")
 dt_final = DecisionTreeClassifier(max_depth=20, random_state=42)
 dt_final.fit(X, y)
